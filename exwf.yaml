@@ -1,0 +1,58 @@
+
+- entries:
+  - url: http://localhost/dev/
+    method: GET
+    delay-min: 50ms
+    wait-reply: true
+  - url: http://localhost/api/card/ctgr
+    method: POST
+    data: '{"aid":1,"cid":"home"}'
+    delay-min: 0ms
+    wait-reply: true
+  - url: http://localhost/api/share/lst
+    method: POST
+    data: '{"aid":1}'
+    delay-min: 100ms
+    wait-reply: true
+  - url: http://localhost/api/card/ctgr
+    method: POST
+    data: '{"aid":1,"cid":"shares"}'
+    delay-min: 0ms
+    wait-reply: true
+  - url: http://localhost/api/card/folder
+    method: POST
+    data: '{"aid":1,"puid":"7NOTK"}'
+    delay-min: 100ms
+    wait-reply: true
+  repeats: 1000
+- entries:
+  - url: http://localhost/dev/id1/path/7NOTK/Club/John%20Digweed/
+    method: GET
+    delay-min: 100ms
+    wait-reply: true
+  - url: http://localhost/api/card/folder
+    method: POST
+    data: '{"aid":1,"puid":"3TQ9I"}'
+    delay-min: 0ms
+    wait-reply: true
+  - url: http://localhost/api/share/lst
+    method: POST
+    data: '{"aid":1}'
+    delay-min: 100ms
+    wait-reply: true
+  - url: http://localhost/id1/file/6V51Q
+    method: GET
+    delay-min: 50ms
+    delay-max: 150ms
+    wait-reply: true
+  - url: http://localhost/id1/file/5NJ02
+    method: GET
+    delay-min: 50ms
+    delay-max: 150ms
+    wait-reply: true
+  - url: http://localhost/id1/file/9U308
+    method: GET
+    delay-min: 50ms
+    delay-max: 150ms
+    wait-reply: true
+  repeats: 500
