@@ -1,6 +1,7 @@
 package exwf
 
 import (
+	"context"
 	"io"
 	"log"
 	"math/rand"
@@ -15,9 +16,10 @@ import (
 )
 
 var (
-	// channel to indicate about server shutdown
-	exitchan chan struct{}
-	// wait group for all server goroutines
+	// context to indicate about service shutdown
+	exitctx context.Context
+	exitfn  context.CancelFunc
+	// wait group for all service goroutines
 	exitwg sync.WaitGroup
 )
 
@@ -26,10 +28,6 @@ var (
 	Threads []*Chain
 	// client - HTTP client for all requests
 	client = &http.Client{}
-	// timeStart - iterations start time
-	timeStart time.Time
-	// timeEnd - iterations end time
-	timeEnd time.Time
 )
 
 // Iteration makes one iteration calls along the chain.
@@ -64,9 +62,9 @@ func (c *Chain) Iteration() (err error) {
 			}
 			time.Sleep(ent.DelayMin + add)
 		}
-		// check exit channel
+		// check on exit signal during running
 		select {
-		case <-exitchan:
+		case <-exitctx.Done():
 			err = io.EOF
 			return
 		default:
@@ -75,10 +73,25 @@ func (c *Chain) Iteration() (err error) {
 	return
 }
 
+// WaitInterrupt returns shutdown signal was recivied and cancels some context.
+func WaitInterrupt(cancel context.CancelFunc) {
+	// Make exit signal on function exit.
+	defer cancel()
+
+	var sigint = make(chan os.Signal, 1)
+	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C) or SIGTERM (Ctrl+/)
+	// SIGKILL, SIGQUIT will not be caught.
+	signal.Notify(sigint, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	// Block until we receive our signal.
+	<-sigint
+	log.Println("shutting down by break")
+}
+
 // Init performs program data initialization.
 func Init() {
-	// inits exit channel
-	exitchan = make(chan struct{})
+	// create context and wait the break
+	exitctx, exitfn = context.WithCancel(context.Background())
+	go WaitInterrupt(exitfn)
 
 	var err error
 	if err = ReadConfig(); err != nil {
@@ -91,7 +104,6 @@ func Init() {
 
 // Run launches program threads.
 func Run() {
-	timeStart = time.Now()
 	for i, chain := range Threads {
 		var i = i
 		var chain = chain
@@ -110,31 +122,12 @@ func Run() {
 			log.Printf("thread %d complete\n", i)
 		}()
 	}
-}
 
-// WaitBreak blocks goroutine until Ctrl+C will be pressed.
-func WaitBreak() {
-	var sigint = make(chan os.Signal)
-	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C) or SIGTERM (Ctrl+/)
-	// SIGKILL, SIGQUIT will not be caught.
-	signal.Notify(sigint, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-
-	// Block until we receive our signal.
-	<-sigint
-	// Make exit signal.
-	close(exitchan)
-}
-
-// WaitExit waits until all server threads will be stopped.
-func WaitExit() {
+	log.Printf("run")
+	var start = time.Now()
 	exitwg.Wait()
-}
-
-// Shutdown performs graceful network shutdown.
-func Shutdown() {
-	timeEnd = time.Now()
-	log.Printf("running time: %v, request number: %d\n",
-		timeEnd.Sub(timeStart), ReqCount)
+	var rundur = time.Since(start)
+	log.Printf("running time: %s, request number: %d\n", rundur.String(), ReqCount)
 }
 
 // The End.

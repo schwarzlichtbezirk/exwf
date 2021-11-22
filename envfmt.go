@@ -6,11 +6,16 @@ import (
 	"regexp"
 )
 
-var efre = regexp.MustCompile(`\$\{\w+\}`)
+var (
+	evure = regexp.MustCompile(`\$\{\w+\}`) // env var with unix-like syntax
+	evwre = regexp.MustCompile(`\%\w+\%`)   // env var with windows-like syntax
+)
 
 func envfmt(p string) string {
-	return filepath.ToSlash(efre.ReplaceAllStringFunc(p, func(name string) string {
+	return filepath.ToSlash(evwre.ReplaceAllStringFunc(evure.ReplaceAllStringFunc(p, func(name string) string {
 		return os.Getenv(name[2 : len(name)-1]) // strip ${...} and replace by env value
+	}), func(name string) string {
+		return os.Getenv(name[1 : len(name)-1]) // strip %...% and replace by env value
 	}))
 }
 
@@ -24,5 +29,3 @@ func pathexists(path string) (bool, error) {
 	}
 	return true, err
 }
-
-// The End.

@@ -2,7 +2,6 @@ package exwf
 
 import (
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -20,8 +19,6 @@ type Entry struct {
 	DelayMin time.Duration `yaml:"delay-min,omitempty"`
 	DelayMax time.Duration `yaml:"delay-max,omitempty"`
 	WaitRpl  bool          `yaml:"wait-reply,omitempty"`
-
-	req *http.Request
 }
 
 // Chain - is the consistent chain of requests entries.
@@ -62,13 +59,38 @@ func ReadYaml(fpath string) (thr []*Chain, err error) {
 	return
 }
 
+const (
+	cfgenv  = "EXWFCONFIGPATH"
+	cfgfile = "exwf.yaml"
+	srcpath = "src/github.com/schwarzlichtbezirk/exwf"
+)
+
 // ReadConfig reads all config YAML-files given at command line.
 func ReadConfig() (err error) {
 	var fpath string
-	// try to read files given at command line
-	for _, fpath = range os.Args[1:] {
+	var exepath = filepath.Dir(os.Args[0])
+
+	// try to get from environment setting
+	if path := envfmt(os.Getenv(cfgenv)); path != "" {
+		// try to get access to full path
+		fpath = filepath.Join(path, cfgfile)
+		if ok, _ := pathexists(fpath); ok {
+			Threads, err = ReadYaml(fpath)
+			return
+		}
+		// try to find relative from executable path
+		fpath = filepath.Join(exepath, path, cfgfile)
+		if ok, _ := pathexists(fpath); ok {
+			Threads, err = ReadYaml(fpath)
+			return
+		}
+		log.Printf("no access to pointed configuration path '%s'\n", path)
+	}
+
+	// try to get from command path arguments
+	for _, path := range os.Args[1:] {
 		var thr []*Chain
-		if thr, err = ReadYaml(fpath); err != nil {
+		if thr, err = ReadYaml(filepath.Join(path, cfgfile)); err != nil {
 			return
 		}
 		Threads = append(Threads, thr...)
@@ -76,28 +98,29 @@ func ReadConfig() (err error) {
 	if len(Threads) > 0 {
 		return
 	}
-	// try to read config current directory
-	fpath = "exwf.yaml"
+
+	// try to find in executable path
+	fpath = filepath.Join(exepath, cfgfile)
 	if ok, _ := pathexists(fpath); ok {
 		Threads, err = ReadYaml(fpath)
 		return
 	}
-	// try to read config at binary location
-	fpath = filepath.Join(filepath.Dir(os.Args[0]), "exwf.yaml")
+	// try to find in current path
+	fpath = filepath.Join(".", cfgfile)
 	if ok, _ := pathexists(fpath); ok {
 		Threads, err = ReadYaml(fpath)
 		return
 	}
 	// if GOPATH is present
 	if gopath := os.Getenv("GOPATH"); gopath != "" {
-		// try to read config at GOPATH binary location
-		fpath = envfmt("${GOPATH}/bin/exwf.yaml")
+		// try to get from go bin config
+		fpath = filepath.Join(gopath, "bin", cfgfile)
 		if ok, _ := pathexists(fpath); ok {
 			Threads, err = ReadYaml(fpath)
 			return
 		}
-		// try to read config from source code
-		fpath = envfmt("${GOPATH}/src/github.com/schwarzlichtbezirk/exwf/exwf.yaml")
+		// try to get from source code
+		fpath = filepath.Join(gopath, srcpath, cfgfile)
 		if ok, _ := pathexists(fpath); ok {
 			Threads, err = ReadYaml(fpath)
 			return
