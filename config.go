@@ -1,6 +1,8 @@
 package exwf
 
 import (
+	"errors"
+	"flag"
 	"log"
 	"os"
 	"path/filepath"
@@ -32,99 +34,110 @@ var (
 	ReqCount int64
 )
 
-// ReadYaml reads thread object from YAML-file with given file path.
-func ReadYaml(fpath string) (thr []*Chain, err error) {
-	var body []byte
-	if body, err = os.ReadFile(fpath); err != nil {
-		return
-	}
-	if err = yaml.Unmarshal(body, &thr); err != nil {
-		return
-	}
-	for _, chain := range thr {
-		for _, ent := range chain.Entries {
-			if ent.Method == "" {
-				if ent.Data == "" {
-					ent.Method = "GET"
-				} else {
-					ent.Method = "POST"
-				}
-			}
-		}
-		if chain.Repeats == 0 {
-			chain.Repeats = -1
-		}
-	}
-	log.Printf("readed file: '%s', threads: %d\n", fpath, len(thr))
-	return
-}
-
 const (
 	cfgenv  = "EXWFCONFIGPATH"
 	cfgfile = "exwf.yaml"
+	cfgbase = "."
 	srcpath = "src/github.com/schwarzlichtbezirk/exwf"
 )
 
-// ReadConfig reads all config YAML-files given at command line.
-func ReadConfig() (err error) {
-	var fpath string
+// Path given from command line parameter.
+var cmdpath = flag.String("c", "", "configuration path")
+
+// ConfigPath determines configuration path, depended on what directory is exist.
+var ConfigPath string
+
+// ErrNoCongig is "no configuration path was found" error message.
+var ErrNoCongig = errors.New("no configuration path was found")
+
+// DetectConfigPath finds configuration path with existing configuration file at least.
+func DetectConfigPath() (cfgpath string, err error) {
+	var path string
 	var exepath = filepath.Dir(os.Args[0])
 
 	// try to get from environment setting
-	if path := envfmt(os.Getenv(cfgenv)); path != "" {
+	if path = envfmt(os.Getenv(cfgenv)); path != "" {
 		// try to get access to full path
-		fpath = filepath.Join(path, cfgfile)
-		if ok, _ := pathexists(fpath); ok {
-			Threads, err = ReadYaml(fpath)
+		if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+			cfgpath = path
 			return
 		}
 		// try to find relative from executable path
-		fpath = filepath.Join(exepath, path, cfgfile)
-		if ok, _ := pathexists(fpath); ok {
-			Threads, err = ReadYaml(fpath)
+		path = filepath.Join(exepath, path)
+		if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+			cfgpath = exepath
 			return
 		}
 		log.Printf("no access to pointed configuration path '%s'\n", path)
 	}
 
 	// try to get from command path arguments
-	for _, path := range os.Args[1:] {
-		var thr []*Chain
-		if thr, err = ReadYaml(filepath.Join(path, cfgfile)); err != nil {
+	if path = *cmdpath; path != "" {
+		// try to get access to full path
+		if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+			cfgpath = path
 			return
 		}
-		Threads = append(Threads, thr...)
-	}
-	if len(Threads) > 0 {
-		return
+		// try to find relative from executable path
+		path = filepath.Join(exepath, path)
+		if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+			cfgpath = path
+			return
+		}
 	}
 
+	// try to get from config subdirectory on executable path
+	path = filepath.Join(exepath, cfgbase)
+	if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+		cfgpath = path
+		return
+	}
 	// try to find in executable path
-	fpath = filepath.Join(exepath, cfgfile)
-	if ok, _ := pathexists(fpath); ok {
-		Threads, err = ReadYaml(fpath)
+	if ok, _ := pathexists(filepath.Join(exepath, cfgfile)); ok {
+		cfgpath = exepath
 		return
 	}
 	// try to find in current path
-	fpath = filepath.Join(".", cfgfile)
-	if ok, _ := pathexists(fpath); ok {
-		Threads, err = ReadYaml(fpath)
+	if ok, _ := pathexists(cfgfile); ok {
+		cfgpath = "."
 		return
 	}
+
 	// if GOPATH is present
 	if gopath := os.Getenv("GOPATH"); gopath != "" {
 		// try to get from go bin config
-		fpath = filepath.Join(gopath, "bin", cfgfile)
-		if ok, _ := pathexists(fpath); ok {
-			Threads, err = ReadYaml(fpath)
+		path = filepath.Join(gopath, "bin", cfgbase)
+		if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+			cfgpath = path
+			return
+		}
+		// try to get from go bin root
+		path = filepath.Join(gopath, "bin")
+		if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+			cfgpath = path
 			return
 		}
 		// try to get from source code
-		fpath = filepath.Join(gopath, srcpath, cfgfile)
-		if ok, _ := pathexists(fpath); ok {
-			Threads, err = ReadYaml(fpath)
+		path = filepath.Join(gopath, srcpath)
+		if ok, _ := pathexists(filepath.Join(path, cfgfile)); ok {
+			cfgpath = path
 			return
 		}
+	}
+
+	// no config was found
+	err = ErrNoCongig
+	return
+}
+
+// ReadYaml reads "data" object from YAML-file with given file path.
+func ReadYaml(fname string, data interface{}) (err error) {
+	var body []byte
+	if body, err = os.ReadFile(filepath.Join(ConfigPath, fname)); err != nil {
+		return
+	}
+	if err = yaml.Unmarshal(body, data); err != nil {
+		return
 	}
 	return
 }
